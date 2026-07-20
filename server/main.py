@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
 
 app = FastAPI(title="Factory Inventory Management System")
@@ -120,6 +121,15 @@ class CreatePurchaseOrderRequest(BaseModel):
     expected_delivery_date: str
     notes: Optional[str] = None
 
+class RestockingOrderItem(BaseModel):
+    sku: str
+    name: str
+    quantity: int
+    unit_price: float
+
+class CreateRestockingOrderRequest(BaseModel):
+    items: List[RestockingOrderItem]
+
 # API endpoints
 @app.get("/")
 def root():
@@ -160,6 +170,55 @@ def get_order(order_id: str):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+@app.post("/api/orders", response_model=Order, status_code=201)
+def create_restocking_order(request: CreateRestockingOrderRequest):
+    """Create a restocking order from demand-driven recommendations"""
+    next_id = str(len(orders) + 1)
+    next_num = str(len(orders) + 1).zfill(4)
+    order_number = f"RST-{datetime.now().year}-{next_num}"
+    today = datetime.now()
+    new_order = {
+        "id": next_id,
+        "order_number": order_number,
+        "customer": "Internal Restocking",
+        "items": [i.dict() for i in request.items],
+        "status": "Submitted",
+        "order_date": today.strftime("%Y-%m-%dT%H:%M:%S"),
+        "expected_delivery": (today + timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%S"),
+        "total_value": round(sum(i.quantity * i.unit_price for i in request.items), 2),
+        "actual_delivery": None,
+        "warehouse": None,
+        "category": None
+    }
+    orders.append(new_order)
+    return new_order
+
+@app.get("/api/restocking/recommendations")
+def get_restocking_recommendations():
+    """Return increasing-trend demand forecasts joined with inventory unit_cost, sorted by demand gap"""
+    inventory_by_sku = {item["sku"]: item for item in inventory_items}
+    result = []
+    for forecast in demand_forecasts:
+        if forecast["trend"] != "increasing":
+            continue
+        gap = forecast["forecasted_demand"] - forecast["current_demand"]
+        if gap <= 0:
+            continue
+        inv = inventory_by_sku.get(forecast["item_sku"])
+        unit_cost = inv["unit_cost"] if inv else None
+        result.append({
+            "sku": forecast["item_sku"],
+            "name": forecast["item_name"],
+            "current_demand": forecast["current_demand"],
+            "forecasted_demand": forecast["forecasted_demand"],
+            "demand_gap": gap,
+            "unit_cost": unit_cost,
+            "item_cost": round(gap * unit_cost, 2) if unit_cost is not None else None,
+            "period": forecast["period"]
+        })
+    result.sort(key=lambda x: x["demand_gap"], reverse=True)
+    return result
 
 @app.get("/api/demand", response_model=List[DemandForecast])
 def get_demand_forecasts():

@@ -29,7 +29,7 @@
 
       <div class="card">
         <div class="card-header">
-          <h3 class="card-title">{{ t('orders.allOrders') }} ({{ orders.length }})</h3>
+          <h3 class="card-title">{{ t('orders.allOrders') }} ({{ customerOrders.length }})</h3>
         </div>
         <div class="table-container">
           <table class="orders-table">
@@ -45,7 +45,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="order in orders" :key="order.id">
+              <tr v-for="order in customerOrders" :key="order.id">
                 <td class="col-order-number"><strong>{{ order.order_number }}</strong></td>
                 <td class="col-customer">{{ translateCustomerName(order.customer) }}</td>
                 <td class="col-items">
@@ -65,6 +65,52 @@
                   <span :class="['badge', getOrderStatusClass(order.status)]">
                     {{ t(`status.${order.status.toLowerCase()}`) }}
                   </span>
+                </td>
+                <td class="col-date">{{ formatDate(order.order_date) }}</td>
+                <td class="col-date">{{ formatDate(order.expected_delivery) }}</td>
+                <td class="col-value"><strong>{{ currencySymbol }}{{ order.total_value.toLocaleString() }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="submittedOrders.length > 0" class="card submitted-orders-card">
+        <div class="card-header">
+          <h3 class="card-title">Submitted Restocking Orders ({{ submittedOrders.length }})</h3>
+        </div>
+        <div class="table-container">
+          <table class="orders-table">
+            <thead>
+              <tr>
+                <th class="col-order-number">Order #</th>
+                <th class="col-customer">Type</th>
+                <th class="col-items">Items</th>
+                <th class="col-status">Status</th>
+                <th class="col-date">Order Date</th>
+                <th class="col-date">Expected Delivery</th>
+                <th class="col-value">Total Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in submittedOrders" :key="order.id">
+                <td class="col-order-number"><strong>{{ order.order_number }}</strong></td>
+                <td class="col-customer">{{ order.customer }}</td>
+                <td class="col-items">
+                  <details class="items-details">
+                    <summary class="items-summary">
+                      {{ order.items.length }} item{{ order.items.length !== 1 ? 's' : '' }}
+                    </summary>
+                    <div class="items-dropdown">
+                      <div v-for="(item, idx) in order.items" :key="idx" class="item-entry">
+                        <span class="item-name">{{ item.name }}</span>
+                        <span class="item-meta">Qty: {{ item.quantity }} @ ${{ item.unit_price }}</span>
+                      </div>
+                    </div>
+                  </details>
+                </td>
+                <td class="col-status">
+                  <span class="badge info">Submitted</span>
                 </td>
                 <td class="col-date">{{ formatDate(order.order_date) }}</td>
                 <td class="col-date">{{ formatDate(order.expected_delivery) }}</td>
@@ -95,6 +141,14 @@ export default {
     const loading = ref(true)
     const error = ref(null)
     const orders = ref([])
+
+    const submittedOrders = computed(() =>
+      orders.value.filter(o => o.status === 'Submitted')
+    )
+
+    const customerOrders = computed(() =>
+      orders.value.filter(o => o.status !== 'Submitted')
+    )
 
     // Use shared filters
     const {
@@ -160,6 +214,8 @@ export default {
       loading,
       error,
       orders,
+      submittedOrders,
+      customerOrders,
       getOrdersByStatus,
       getOrderStatusClass,
       formatDate,
@@ -275,5 +331,9 @@ export default {
 .item-meta {
   font-size: 0.813rem;
   color: #64748b;
+}
+
+.submitted-orders-card {
+  margin-top: 1.5rem;
 }
 </style>
